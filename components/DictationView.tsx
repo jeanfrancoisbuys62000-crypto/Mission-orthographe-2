@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from './Button';
 import { DictationText, ModuleType, EvaluationResult } from '../types';
@@ -31,7 +30,7 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
     setAudioError(null);
     try {
       if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop();
+        try { sourceNodeRef.current.stop(); } catch(e) {}
       }
       
       const audioData = await generateSpeech(dictation.content, slow);
@@ -40,7 +39,11 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       
-      const buffer = await decodeAudioData(audioData, audioContextRef.current, 24000, 1);
+      const ctx = audioContextRef.current;
+      if (!ctx) throw new Error("AudioContext failed to initialize");
+
+      // FIX TS2345: ctx est maintenant garanti non-nul ici
+      const buffer = await decodeAudioData(audioData, ctx, 24000, 1);
       audioBufferRef.current = buffer;
       setDuration(buffer.duration);
       pausedTimeRef.current = 0;
@@ -56,32 +59,39 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
   useEffect(() => {
     initAudio(false);
     return () => {
-      if (sourceNodeRef.current) sourceNodeRef.current.stop();
+      if (sourceNodeRef.current) {
+        try { sourceNodeRef.current.stop(); } catch(e) {}
+      }
     };
   }, [dictation]);
 
   const togglePlayback = () => {
+    const ctx = audioContextRef.current;
+    const buffer = audioBufferRef.current;
+
     if (isPlaying) {
-      sourceNodeRef.current?.stop();
-      if (audioContextRef.current) {
-        pausedTimeRef.current += audioContextRef.current.currentTime - startTimeRef.current;
+      if (sourceNodeRef.current) {
+        try { sourceNodeRef.current.stop(); } catch(e) {}
+      }
+      if (ctx) {
+        pausedTimeRef.current += ctx.currentTime - startTimeRef.current;
       }
       setIsPlaying(false);
     } else {
-      if (!audioBufferRef.current || !audioContextRef.current) return;
+      if (!buffer || !ctx) return;
       
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = audioBufferRef.current;
-      source.connect(audioContextRef.current.destination);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
       
-      const offset = pausedTimeRef.current % audioBufferRef.current.duration;
+      const offset = pausedTimeRef.current % buffer.duration;
       source.start(0, offset);
-      startTimeRef.current = audioContextRef.current.currentTime;
+      startTimeRef.current = ctx.currentTime;
       sourceNodeRef.current = source;
       setIsPlaying(true);
 
       source.onended = () => {
-        if (isPlaying) setIsPlaying(false);
+        setIsPlaying(false);
       };
     }
   };
@@ -97,8 +107,9 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
     let interval: any;
     if (isPlaying) {
       interval = setInterval(() => {
-        if (audioContextRef.current) {
-          const elapsed = (audioContextRef.current.currentTime - startTimeRef.current) + pausedTimeRef.current;
+        const ctx = audioContextRef.current;
+        if (ctx) {
+          const elapsed = (ctx.currentTime - startTimeRef.current) + pausedTimeRef.current;
           setCurrentTime(Math.min(elapsed, duration));
         }
       }, 100);

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ModuleType, DifficultyLevel, DictationText, EvaluationResult, UserProgress, DictationMetadata } from './types';
@@ -60,16 +59,11 @@ const Logo = () => (
   </div>
 );
 
-// Logos décoratifs pour les palliers
 const PallierIcon = ({ level }: { level: number }) => {
   const icons = [
-    // Pallier 1 : La Plume
     <svg key="1" className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
-    // Pallier 2 : Le Parchemin
     <svg key="2" className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
-    // Pallier 3 : L'Encrier / Stylo plume
     <svg key="3" className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5h2M7 5h1m8 0h1m-9 8a9 9 0 0118 0v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a9 9 0 019-9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 11l-2 5h4l-2-5z" /></svg>,
-    // Pallier 4 : Les Lauriers / Succès
     <svg key="4" className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
   ];
   return icons[level - 1] || icons[0];
@@ -90,18 +84,22 @@ const App: React.FC = () => {
 
   const [progress, setProgress] = useState<UserProgress>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    const initialProgress = { 
+    const initialProgress: UserProgress = { 
       completedTraining: [], 
       completedBrevet: [], 
       catalogs: INITIAL_CATALOGS 
     };
     if (!saved) return initialProgress;
     
-    const parsed = JSON.parse(saved);
-    return {
-      ...parsed,
-      catalogs: { ...INITIAL_CATALOGS, ...parsed.catalogs }
-    };
+    try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...parsed,
+          catalogs: { ...INITIAL_CATALOGS, ...(parsed.catalogs || {}) }
+        };
+    } catch(e) {
+        return initialProgress;
+    }
   });
 
   useEffect(() => {
@@ -150,11 +148,12 @@ const App: React.FC = () => {
   };
 
   const loadDictation = async (meta: DictationMetadata) => {
+    if (!activeModule) return;
     setView('loading');
     try {
       const dictation = await generateDictationTextFromMetadata(
         meta, 
-        activeModule!, 
+        activeModule, 
         selectedLevel || 1
       );
       setCurrentDictation(dictation);
@@ -208,7 +207,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* TABS NAVIGATION */}
       <div className="flex justify-center">
         <div className="bg-slate-200/50 p-1.5 rounded-[2.2rem] flex items-center backdrop-blur-md border border-white/20">
           <button 
@@ -286,7 +284,6 @@ const App: React.FC = () => {
                   </div>
                   <p className="text-amber-50 font-medium opacity-70 italic text-lg">Simulez l'examen final en 140 mots.</p>
                 </div>
-                <svg className="absolute -bottom-10 -right-10 w-64 h-64 text-white opacity-5 transition-transform group-hover:scale-110 duration-700" fill="currentColor" viewBox="0 0 20 20"><path d="M10.394 2.827c.197-.101.415-.152.606-.152.191 0 .409.051.606.152l7 3.5c.394.197.394.514 0 .711l-7 3.5c-.197.101-.415.152-.606.152-.191 0-.409-.051-.606-.152l-7-3.5c-.394-.197-.394-.514 0-.711l7-3.5z"/></svg>
               </div>
               <div className="p-10 flex flex-col justify-center flex-1 bg-slate-50/20 space-y-10">
                 <div className="bg-white rounded-[2.5rem] p-10 border border-slate-100 shadow-sm relative overflow-hidden group/card">
@@ -298,19 +295,7 @@ const App: React.FC = () => {
                        <h3 className="font-black text-slate-800 text-2xl tracking-tight">Préparation Intensive</h3>
                     </div>
                     <p className="text-slate-500 text-lg leading-relaxed font-serif">Une sélection de 30 textes littéraires officiels pour maîtriser les épreuves du brevet.</p>
-                    
-                    <div className="mt-8 flex items-center gap-5">
-                      <div className="flex -space-x-3">
-                        {[1,2,3,4].map(i => (
-                          <div key={i} className="w-10 h-10 rounded-full border-[3px] border-white bg-slate-100 flex items-center justify-center text-[11px] font-black text-slate-600 shadow-sm">
-                            {i}
-                          </div>
-                        ))}
-                      </div>
-                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">+26 auteurs classiques</span>
-                    </div>
                   </div>
-                  <div className="absolute -top-16 -right-16 w-40 h-40 bg-amber-50/50 rounded-full scale-0 group-hover/card:scale-100 transition-transform duration-700"></div>
                 </div>
                 
                 <Button 
@@ -369,11 +354,6 @@ const App: React.FC = () => {
                 >
                   <div className="flex justify-between items-start mb-6">
                     <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isCompleted ? 'text-emerald-500' : 'text-slate-300'}`}>Pièce {item.index}</span>
-                    {isCompleted && (
-                      <div className="bg-emerald-500 text-white p-1.5 rounded-full shadow-lg shadow-emerald-200 animate-bounce">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"></path></svg>
-                      </div>
-                    )}
                   </div>
                   <h3 className={`font-black text-2xl tracking-tighter leading-tight mb-3 ${isCompleted ? 'text-emerald-900' : 'text-slate-800'}`}>
                     {item.author}
@@ -381,14 +361,6 @@ const App: React.FC = () => {
                   <p className={`text-lg leading-relaxed font-serif italic mb-6 ${isCompleted ? 'text-emerald-700/80' : 'text-slate-500'}`}>
                     "{item.source}", {item.date}
                   </p>
-                  
-                  {!isCompleted && (
-                    <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity translate-x-4 group-hover:translate-x-0 duration-300">
-                      <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
-                      </div>
-                    </div>
-                  )}
                 </button>
               );
             })}
@@ -408,9 +380,6 @@ const App: React.FC = () => {
           <div className="relative">
             <div className="w-40 h-40 border-[14px] border-indigo-50 rounded-full"></div>
             <div className="absolute top-0 left-0 w-40 h-40 border-[14px] border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center scale-125">
-              <Logo />
-            </div>
           </div>
           <div className="text-center space-y-4">
             <h3 className="text-4xl font-black text-slate-900 tracking-tighter">Préparation Stylistique</h3>

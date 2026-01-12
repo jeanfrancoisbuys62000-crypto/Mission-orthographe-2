@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
 import { ModuleType, DifficultyLevel, DictationText, EvaluationResult, DictationMetadata } from "../types";
 
+const getApiKey = () => process.env.API_KEY || '';
+
 // Helper to decode PCM
 export function decode(base64: string) {
   const binaryString = atob(base64);
@@ -39,7 +41,7 @@ export const generateCatalog = async (
   level?: DifficultyLevel,
   count: number = 50
 ): Promise<DictationMetadata[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const context = type === ModuleType.TRAINING ? `niveau de difficulté ${level} sur 4` : "type Brevet des collèges (officiel)";
   
   const prompt = `Génère une liste de ${count} textes célèbres adaptés pour une dictée de 3ème, ${context}.
@@ -66,7 +68,8 @@ export const generateCatalog = async (
               required: ["author", "source", "date"],
             }
           }
-        }
+        },
+        required: ["items"]
       }
     }
   });
@@ -74,7 +77,7 @@ export const generateCatalog = async (
   const text = response.text;
   if (!text) throw new Error("Réponse vide de l'IA");
   const data = JSON.parse(text);
-  return data.items.map((item: any, idx: number) => ({
+  return (data.items || []).map((item: any, idx: number) => ({
     ...item,
     index: idx + 1,
     id: type === ModuleType.TRAINING ? `level-${level}-text-${idx + 1}` : `brevet-text-${idx + 1}`
@@ -89,7 +92,7 @@ export const generateDictationTextFromMetadata = async (
   type: ModuleType,
   level: DifficultyLevel = 1
 ): Promise<DictationText> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const wordRange = type === ModuleType.TRAINING ? "50 à 60" : "120 à 140";
 
   const prompt = `Génère un extrait de texte pour une dictée de troisième.
@@ -130,7 +133,7 @@ export const evaluateDictation = async (
   original: string,
   userSubmission: string
 ): Promise<EvaluationResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const prompt = `Évalue cette dictée.
   Texte original: "${original}"
   Texte élève: "${userSubmission}"
@@ -158,10 +161,12 @@ export const evaluateDictation = async (
                 startIndex: { type: Type.NUMBER },
                 endIndex: { type: Type.NUMBER },
               },
+              required: ["text", "type", "hint", "startIndex", "endIndex"]
             }
           },
           correctText: { type: Type.STRING },
         },
+        required: ["score", "comment", "errors", "correctText"]
       }
     }
   });
@@ -172,7 +177,7 @@ export const evaluateDictation = async (
 };
 
 export const generateSpeech = async (text: string, slowMode: boolean, retryCount = 0): Promise<Uint8Array> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   
   const cleanText = text
     .replace(/[^\w\sàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ.,!?;:'"()\-]/g, ' ')
