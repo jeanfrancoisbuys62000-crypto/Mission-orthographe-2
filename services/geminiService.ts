@@ -1,5 +1,4 @@
-
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
 import { ModuleType, DifficultyLevel, DictationText, EvaluationResult, DictationMetadata } from "../types";
 
 // Helper to decode PCM
@@ -47,7 +46,7 @@ export const generateCatalog = async (
   Varie les auteurs classiques et contemporains.
   Renvoie UNIQUEMENT un JSON contenant un tableau d'objets avec les champs : author, source (titre de l'oeuvre), date (année).`;
 
-  const response = await ai.models.generateContent({
+  const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
@@ -72,7 +71,9 @@ export const generateCatalog = async (
     }
   });
 
-  const data = JSON.parse(response.text);
+  const text = response.text;
+  if (!text) throw new Error("Réponse vide de l'IA");
+  const data = JSON.parse(text);
   return data.items.map((item: any, idx: number) => ({
     ...item,
     index: idx + 1,
@@ -97,7 +98,7 @@ export const generateDictationTextFromMetadata = async (
   Le texte doit être fidèle à l'oeuvre originale et faire exactement entre ${wordRange} mots.
   Renvoie UNIQUEMENT un JSON avec les champs : content, wordCount.`;
 
-  const response = await ai.models.generateContent({
+  const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
@@ -113,7 +114,9 @@ export const generateDictationTextFromMetadata = async (
     }
   });
 
-  const data = JSON.parse(response.text);
+  const text = response.text;
+  if (!text) throw new Error("Réponse vide de l'IA");
+  const data = JSON.parse(text);
   return {
     ...metadata,
     content: data.content,
@@ -134,7 +137,7 @@ export const evaluateDictation = async (
   Retire 1 pt par faute de grammaire, 0,5 pt par faute lexicale.
   Renvoie un JSON avec: score (0-10), comment (pédagogique), correctText, et errors (tableau d'objets avec text, type, hint, startIndex, endIndex).`;
 
-  const response = await ai.models.generateContent({
+  const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
@@ -163,29 +166,27 @@ export const evaluateDictation = async (
     }
   });
 
-  return JSON.parse(response.text);
+  const text = response.text;
+  if (!text) throw new Error("Réponse vide de l'IA");
+  return JSON.parse(text);
 };
 
 export const generateSpeech = async (text: string, slowMode: boolean, retryCount = 0): Promise<Uint8Array> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   
-  // Nettoyage agressif : garder uniquement lettres, chiffres et ponctuation de base
-  // L'erreur 500 est souvent liée à des caractères de contrôle ou des emojis invisibles
   const cleanText = text
     .replace(/[^\w\sàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ.,!?;:'"()\-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  // Mode "Dictée" : on demande explicitement la lecture de la ponctuation dans le prompt
   const speedInstruction = slowMode ? "TRÈS LENTEMENT" : "posément";
   const prompt = `Lis ce texte pour une dictée, ${speedInstruction}, en prononçant distinctement la ponctuation : ${cleanText}`;
 
   try {
-    const response = await ai.models.generateContent({
+    const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text: prompt }] }],
       config: {
-        // Suppression du systemInstruction pour voir si cela stabilise le serveur (erreur 500 fréquente sur les instructions complexes)
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
@@ -204,7 +205,6 @@ export const generateSpeech = async (text: string, slowMode: boolean, retryCount
   } catch (error: any) {
     console.error(`Gemini TTS Error (Attempt ${retryCount + 1}):`, error);
     
-    // Retry logique pour les erreurs 500 (transientes)
     if (retryCount < 2 && (error.status === 500 || error.message?.includes('500') || error.message?.includes('INTERNAL'))) {
       await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
       return generateSpeech(text, slowMode, retryCount + 1);
