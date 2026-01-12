@@ -1,0 +1,7 @@
+{
+  "name": "Orthographe Expert - Niveau 3ème",
+  "description": "Une application interactive pour améliorer l'orthographe grâce à des dictées dictées par IA basées sur le programme de troisième.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
