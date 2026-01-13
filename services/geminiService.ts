@@ -1,9 +1,9 @@
 import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/genai";
 import { ModuleType, DifficultyLevel, DictationText, EvaluationResult, DictationMetadata } from "../types";
 
-const getApiKey = () => process.env.API_KEY || '';
+// Sécurisation de la clé d'API pour TypeScript
+const getApiKey = () => (process.env as any).API_KEY || '';
 
-// Helper to decode PCM
 export function decode(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -33,9 +33,6 @@ export async function decodeAudioData(
   return buffer;
 }
 
-/**
- * Génère un catalogue de métadonnées pour un module donné.
- */
 export const generateCatalog = async (
   type: ModuleType,
   level?: DifficultyLevel,
@@ -45,8 +42,7 @@ export const generateCatalog = async (
   const context = type === ModuleType.TRAINING ? `niveau de difficulté ${level} sur 4` : "type Brevet des collèges (officiel)";
   
   const prompt = `Génère une liste de ${count} textes célèbres adaptés pour une dictée de 3ème, ${context}.
-  Varie les auteurs classiques et contemporains.
-  Renvoie UNIQUEMENT un JSON contenant un tableau d'objets avec les champs : author, source (titre de l'oeuvre), date (année).`;
+  Varie les auteurs classiques et contemporains. Renvoie UNIQUEMENT un JSON contenant un tableau d'objets avec les champs : author, source, date.`;
 
   const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -75,7 +71,7 @@ export const generateCatalog = async (
   });
 
   const text = response.text;
-  if (!text) throw new Error("Réponse vide de l'IA");
+  if (!text) throw new Error("Réponse vide");
   const data = JSON.parse(text);
   return (data.items || []).map((item: any, idx: number) => ({
     ...item,
@@ -84,9 +80,6 @@ export const generateCatalog = async (
   }));
 };
 
-/**
- * Génère le contenu d'une dictée.
- */
 export const generateDictationTextFromMetadata = async (
   metadata: DictationMetadata,
   type: ModuleType,
@@ -96,10 +89,8 @@ export const generateDictationTextFromMetadata = async (
   const wordRange = type === ModuleType.TRAINING ? "50 à 60" : "120 à 140";
 
   const prompt = `Génère un extrait de texte pour une dictée de troisième.
-  Auteur : ${metadata.author}
-  Oeuvre : ${metadata.source} (${metadata.date})
-  Le texte doit être fidèle à l'oeuvre originale et faire exactement entre ${wordRange} mots.
-  Renvoie UNIQUEMENT un JSON avec les champs : content, wordCount.`;
+  Auteur : ${metadata.author}. Oeuvre : ${metadata.source}.
+  Le texte doit faire entre ${wordRange} mots. Renvoie UNIQUEMENT un JSON avec content et wordCount.`;
 
   const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -118,15 +109,9 @@ export const generateDictationTextFromMetadata = async (
   });
 
   const text = response.text;
-  if (!text) throw new Error("Réponse vide de l'IA");
+  if (!text) throw new Error("Réponse vide");
   const data = JSON.parse(text);
-  return {
-    ...metadata,
-    content: data.content,
-    wordCount: data.wordCount,
-    level,
-    type
-  };
+  return { ...metadata, content: data.content, wordCount: data.wordCount, level, type };
 };
 
 export const evaluateDictation = async (
@@ -134,11 +119,8 @@ export const evaluateDictation = async (
   userSubmission: string
 ): Promise<EvaluationResult> => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
-  const prompt = `Évalue cette dictée.
-  Texte original: "${original}"
-  Texte élève: "${userSubmission}"
-  Retire 1 pt par faute de grammaire, 0,5 pt par faute lexicale.
-  Renvoie un JSON avec: score (0-10), comment (pédagogique), correctText, et errors (tableau d'objets avec text, type, hint, startIndex, endIndex).`;
+  const prompt = `Évalue cette dictée. Texte original: "${original}". Texte élève: "${userSubmission}".
+  Renvoie un JSON avec: score (0-10), comment, correctText, et errors (text, type, hint, startIndex, endIndex).`;
 
   const response: GenerateContentResponse = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -171,22 +153,18 @@ export const evaluateDictation = async (
     }
   });
 
-  const text = response.text;
-  if (!text) throw new Error("Réponse vide de l'IA");
-  return JSON.parse(text);
+  return JSON.parse(response.text || '{}');
 };
 
 export const generateSpeech = async (text: string, slowMode: boolean, retryCount = 0): Promise<Uint8Array> => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
   
-  const cleanText = text
-    .replace(/[^\w\sàâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ.,!?;:'"()\-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Nettoyage minimal pour conserver la structure de la phrase
+  const cleanText = text.replace(/[\r\n]+/g, ' ').trim();
 
-  // Prompt ultra-simplifié pour forcer le mode AUDIO et éviter le fallback TEXT
-  const speed = slowMode ? "very slowly" : "clearly";
-  const prompt = `Read this text for a dictation, ${speed}, pronouncing all punctuation: ${cleanText}`;
+  // FIX: Prompt ultra-minimaliste pour forcer le mode AUDIO
+  // L'IA Gemini Flash TTS nécessite souvent une instruction très courte pour ne pas bifurquer vers du texte.
+  const prompt = `Say: ${cleanText}`;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -196,25 +174,25 @@ export const generateSpeech = async (text: string, slowMode: boolean, retryCount
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
+            // Puck est souvent plus stable pour le français littéraire
+            prebuiltVoiceConfig: { voiceName: 'Puck' },
           },
         },
       },
     });
 
-    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-    if (!part || !part.inlineData) {
-       // Si le modèle a renvoyé du texte au lieu de l'audio malgré nos précautions
-       throw new Error("Le modèle a renvoyé une réponse textuelle au lieu de l'audio.");
+    const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (!audioPart || !audioPart.inlineData) {
+       throw new Error("L'IA n'a pas généré de données audio. Vérifiez le contenu du texte.");
     }
 
-    return decode(part.inlineData.data);
+    return decode(audioPart.inlineData.data);
   } catch (error: any) {
-    console.error(`Gemini TTS Error (Attempt ${retryCount + 1}):`, error);
+    console.error(`Erreur TTS (Tentative ${retryCount + 1}):`, error);
     
-    // Retry logic pour les erreurs temporaires
-    if (retryCount < 2) {
-      await new Promise(r => setTimeout(r, 1500 * (retryCount + 1)));
+    // On ne réessaie que sur les erreurs serveur (500+)
+    if (retryCount < 1 && error.status >= 500) {
+      await new Promise(r => setTimeout(r, 2000));
       return generateSpeech(text, slowMode, retryCount + 1);
     }
     
