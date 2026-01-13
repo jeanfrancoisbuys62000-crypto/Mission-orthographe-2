@@ -184,8 +184,9 @@ export const generateSpeech = async (text: string, slowMode: boolean, retryCount
     .replace(/\s+/g, ' ')
     .trim();
 
-  const speedInstruction = slowMode ? "TRÈS LENTEMENT" : "posément";
-  const prompt = `Lis ce texte pour une dictée, ${speedInstruction}, en prononçant distinctement la ponctuation : ${cleanText}`;
+  // Prompt ultra-simplifié pour forcer le mode AUDIO et éviter le fallback TEXT
+  const speed = slowMode ? "very slowly" : "clearly";
+  const prompt = `Read this text for a dictation, ${speed}, pronouncing all punctuation: ${cleanText}`;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -203,15 +204,17 @@ export const generateSpeech = async (text: string, slowMode: boolean, retryCount
 
     const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!part || !part.inlineData) {
-       throw new Error("No audio data in response");
+       // Si le modèle a renvoyé du texte au lieu de l'audio malgré nos précautions
+       throw new Error("Le modèle a renvoyé une réponse textuelle au lieu de l'audio.");
     }
 
     return decode(part.inlineData.data);
   } catch (error: any) {
     console.error(`Gemini TTS Error (Attempt ${retryCount + 1}):`, error);
     
-    if (retryCount < 2 && (error.status === 500 || error.message?.includes('500') || error.message?.includes('INTERNAL'))) {
-      await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+    // Retry logic pour les erreurs temporaires
+    if (retryCount < 2) {
+      await new Promise(r => setTimeout(r, 1500 * (retryCount + 1)));
       return generateSpeech(text, slowMode, retryCount + 1);
     }
     
