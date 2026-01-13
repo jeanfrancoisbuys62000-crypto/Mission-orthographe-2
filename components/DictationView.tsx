@@ -35,7 +35,6 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
       
       const audioData = await generateSpeech(dictation.content, slow);
       
-      // Initialisation sécurisée de l'AudioContext
       if (!audioContextRef.current) {
         const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
         audioContextRef.current = new AudioContextClass();
@@ -44,7 +43,6 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
       const ctx = audioContextRef.current;
       if (!ctx) throw new Error("Impossible d'initialiser l'AudioContext");
 
-      // FIX TS2345: ctx est maintenant typé explicitement et validé
       const buffer = await decodeAudioData(audioData, ctx, 24000, 1);
       audioBufferRef.current = buffer;
       setDuration(buffer.duration);
@@ -52,7 +50,7 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
       setCurrentTime(0);
     } catch (error: any) {
       console.error("Audio error:", error);
-      setAudioError("Erreur technique de synthèse vocale. Essayez de raccourcir le texte ou de changer de dictée.");
+      setAudioError("Erreur technique de synthèse vocale. Veuillez réessayer ou choisir une autre dictée.");
     } finally {
       setIsAudioLoading(false);
     }
@@ -98,7 +96,6 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
       setIsPlaying(true);
 
       source.onended = () => {
-        // On ne remet à zéro que si on a vraiment fini le buffer
         if (Math.abs((ctx.currentTime - startTimeRef.current) + pausedTimeRef.current - buffer.duration) < 0.2) {
             setIsPlaying(false);
             pausedTimeRef.current = 0;
@@ -116,7 +113,7 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
   };
 
   useEffect(() => {
-    let interval: number;
+    let interval: any;
     if (isPlaying) {
       interval = window.setInterval(() => {
         const ctx = audioContextRef.current;
@@ -126,7 +123,9 @@ export const DictationView: React.FC<DictationViewProps> = ({ dictation, onFinis
         }
       }, 100);
     }
-    return () => clearInterval(interval!);
+    return () => {
+      if (interval) window.clearInterval(interval);
+    };
   }, [isPlaying, duration]);
 
   const handleSubmit = async () => {

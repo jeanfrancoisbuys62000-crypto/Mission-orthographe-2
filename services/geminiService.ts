@@ -2,9 +2,9 @@ import { GoogleGenAI, Type, Modality, GenerateContentResponse } from "@google/ge
 import { ModuleType, DifficultyLevel, DictationText, EvaluationResult, DictationMetadata } from "../types";
 
 // Sécurisation de la clé d'API pour TypeScript
-const getApiKey = () => (process.env as any).API_KEY || '';
+const getApiKey = (): string => (process.env as any).API_KEY || '';
 
-export function decode(base64: string) {
+export function decode(base64: string): Uint8Array {
   const binaryString = atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
@@ -153,17 +153,17 @@ export const evaluateDictation = async (
     }
   });
 
-  return JSON.parse(response.text || '{}');
+  const resultText = response.text || '{}';
+  return JSON.parse(resultText);
 };
 
-export const generateSpeech = async (text: string, slowMode: boolean, retryCount = 0): Promise<Uint8Array> => {
+export const generateSpeech = async (text: string, _slowMode: boolean, retryCount = 0): Promise<Uint8Array> => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
   
-  // Nettoyage minimal pour conserver la structure de la phrase
-  const cleanText = text.replace(/[\r\n]+/g, ' ').trim();
+  // Nettoyage pour éviter les caractères qui pourraient perturber le modèle TTS
+  const cleanText = text.replace(/[\r\n]+/g, ' ').replace(/"/g, "'").trim();
 
-  // FIX: Prompt ultra-minimaliste pour forcer le mode AUDIO
-  // L'IA Gemini Flash TTS nécessite souvent une instruction très courte pour ne pas bifurquer vers du texte.
+  // FIX: Format "Say: ..." est le plus stable pour garantir une réponse Modality.AUDIO
   const prompt = `Say: ${cleanText}`;
 
   try {
@@ -174,7 +174,6 @@ export const generateSpeech = async (text: string, slowMode: boolean, retryCount
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            // Puck est souvent plus stable pour le français littéraire
             prebuiltVoiceConfig: { voiceName: 'Puck' },
           },
         },
@@ -182,18 +181,20 @@ export const generateSpeech = async (text: string, slowMode: boolean, retryCount
     });
 
     const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-    if (!audioPart || !audioPart.inlineData) {
-       throw new Error("L'IA n'a pas généré de données audio. Vérifiez le contenu du texte.");
+    
+    // FIX TS2345: Vérification explicite de data avant de passer à decode()
+    if (!audioPart || !audioPart.inlineData || !audioPart.inlineData.data) {
+       throw new Error("L'IA n'a pas renvoyé de flux audio valide.");
     }
 
     return decode(audioPart.inlineData.data);
   } catch (error: any) {
     console.error(`Erreur TTS (Tentative ${retryCount + 1}):`, error);
     
-    // On ne réessaie que sur les erreurs serveur (500+)
-    if (retryCount < 1 && error.status >= 500) {
+    // On ne réessaie que sur les erreurs serveur ou temporaires
+    if (retryCount < 1) {
       await new Promise(r => setTimeout(r, 2000));
-      return generateSpeech(text, slowMode, retryCount + 1);
+      return generateSpeech(text, _slowMode, retryCount + 1);
     }
     
     throw error;
