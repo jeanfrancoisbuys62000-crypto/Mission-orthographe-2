@@ -159,8 +159,8 @@ const App: React.FC = () => {
       setCurrentDictation(dictation);
       setView('dictation');
     } catch (error) {
-      console.error("Failed to load dictation", error);
-      alert("Erreur de chargement. Veuillez réessayer.");
+      console.error("Erreur de génération du texte :", error);
+      alert(`Erreur de chargement. Veuillez vérifier votre connexion et réessayer.\nDétails : ${error instanceof Error ? error.message : 'Inconnu'}`);
       setView('browser');
     }
   };

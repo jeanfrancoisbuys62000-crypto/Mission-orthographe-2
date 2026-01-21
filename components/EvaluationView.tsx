@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from './Button';
 import { EvaluationResult, ErrorDetail } from '../types';
 
@@ -20,17 +19,16 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
   const [showFullCorrection, setShowFullCorrection] = useState(false);
   const [correctionInput, setCorrectionInput] = useState(userText);
   const [isEditing, setIsEditing] = useState(false);
+  const correctionRef = useRef<HTMLDivElement>(null);
 
   /**
    * Génère le texte avec surlignage complexe.
-   * Gère les erreurs adjacentes, imbriquées et chevauchantes.
    */
   const renderHighlightedText = () => {
     if (!result.errors || result.errors.length === 0) {
       return <span>{userText}</span>;
     }
 
-    // 1. Collecter toutes les frontières d'index uniques
     const boundaries = new Set<number>([0, userText.length]);
     result.errors.forEach(error => {
       if (error.startIndex >= 0 && error.startIndex <= userText.length) {
@@ -44,7 +42,6 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
     const sortedBoundaries = Array.from(boundaries).sort((a, b) => a - b);
     const elements: React.ReactNode[] = [];
 
-    // 2. Parcourir chaque segment entre deux frontières
     for (let i = 0; i < sortedBoundaries.length - 1; i++) {
       const start = sortedBoundaries[i];
       const end = sortedBoundaries[i + 1];
@@ -52,7 +49,6 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
 
       if (segmentText === "") continue;
 
-      // Trouver toutes les erreurs qui couvrent ce segment précis
       const errorsInSegment = result.errors.filter(
         error => start >= error.startIndex && end <= error.endIndex
       );
@@ -60,8 +56,6 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
       if (errorsInSegment.length === 0) {
         elements.push(<span key={`seg-${start}-${end}`}>{segmentText}</span>);
       } else {
-        // 3. Imbriquer les spans pour chaque erreur couvrant ce segment
-        // On trie par longueur d'erreur décroissante pour que les plus larges soient à l'extérieur
         const sortedErrors = [...errorsInSegment].sort((a, b) => 
           (b.endIndex - b.startIndex) - (a.endIndex - a.startIndex)
         );
@@ -100,6 +94,16 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
     if (score >= 8) return 'text-emerald-600';
     if (score >= 5) return 'text-amber-600';
     return 'text-rose-600';
+  };
+
+  const handleToggleCorrection = () => {
+    const nextShow = !showFullCorrection;
+    setShowFullCorrection(nextShow);
+    if (nextShow && correctionRef.current) {
+        setTimeout(() => {
+            correctionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    }
   };
 
   return (
@@ -153,7 +157,7 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
           </div>
 
           {showFullCorrection && (
-            <div className="bg-emerald-50/50 p-10 rounded-[2.5rem] border border-emerald-100 animate-slideUp">
+            <div ref={correctionRef} className="bg-emerald-50/50 p-10 rounded-[2.5rem] border border-emerald-100 animate-slideUp">
               <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-6">Texte original de référence</h3>
               <p className="font-serif text-xl md:text-2xl leading-relaxed text-emerald-900 italic opacity-90">
                 {result.correctText}
@@ -205,13 +209,19 @@ export const EvaluationView: React.FC<EvaluationViewProps> = ({
           </div>
 
           <div className="pt-4 flex flex-col gap-4">
-            <button 
-              onClick={() => setShowFullCorrection(!showFullCorrection)}
-              className="w-full py-4 px-6 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm hover:border-indigo-600 hover:text-indigo-600 transition-all active:scale-95"
+            <Button 
+              variant={showFullCorrection ? "secondary" : "outline"}
+              onClick={handleToggleCorrection}
+              className="w-full py-6 rounded-2xl border-2 font-black text-sm transition-all"
             >
               {showFullCorrection ? "Masquer la correction" : "Voir la correction intégrale"}
-            </button>
-            <Button variant="primary" size="lg" className="rounded-[2rem] py-6 shadow-2xl shadow-indigo-100 text-lg font-black" onClick={onNewDictation}>
+            </Button>
+            <Button 
+              variant="primary" 
+              size="lg" 
+              className="rounded-[2rem] py-8 shadow-2xl shadow-indigo-100 text-lg font-black" 
+              onClick={onNewDictation}
+            >
               Choisir un autre texte
             </Button>
           </div>

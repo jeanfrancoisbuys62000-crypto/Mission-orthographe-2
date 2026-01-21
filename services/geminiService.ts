@@ -4,6 +4,13 @@ import { ModuleType, DifficultyLevel, DictationText, EvaluationResult, Dictation
 // Sécurisation de la clé d'API pour TypeScript
 const getApiKey = (): string => (process.env as any).API_KEY || '';
 
+/**
+ * Nettoie une chaîne JSON potentiellement entourée de balises Markdown
+ */
+const cleanJsonString = (str: string): string => {
+  return str.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+};
+
 export function decode(base64: string): Uint8Array {
   const binaryString = atob(base64);
   const len = binaryString.length;
@@ -71,8 +78,8 @@ export const generateCatalog = async (
   });
 
   const text = response.text;
-  if (!text) throw new Error("Réponse vide");
-  const data = JSON.parse(text);
+  if (!text) throw new Error("Réponse vide de l'IA");
+  const data = JSON.parse(cleanJsonString(text));
   return (data.items || []).map((item: any, idx: number) => ({
     ...item,
     index: idx + 1,
@@ -110,7 +117,7 @@ export const generateDictationTextFromMetadata = async (
 
   const text = response.text;
   if (!text) throw new Error("Réponse vide");
-  const data = JSON.parse(text);
+  const data = JSON.parse(cleanJsonString(text));
   return { ...metadata, content: data.content, wordCount: data.wordCount, level, type };
 };
 
@@ -154,17 +161,17 @@ export const evaluateDictation = async (
   });
 
   const resultText = response.text || '{}';
-  return JSON.parse(resultText);
+  return JSON.parse(cleanJsonString(resultText));
 };
 
 export const generateSpeech = async (text: string, _slowMode: boolean, retryCount = 0): Promise<Uint8Array> => {
   const ai = new GoogleGenAI({ apiKey: getApiKey() });
   
-  // Nettoyage pour éviter les caractères qui pourraient perturber le modèle TTS
+  // Nettoyage minimal
   const cleanText = text.replace(/[\r\n]+/g, ' ').replace(/"/g, "'").trim();
 
-  // FIX: Format "Say: ..." est le plus stable pour garantir une réponse Modality.AUDIO
-  const prompt = `Say: ${cleanText}`;
+  // FIX: Format "Read: ..." est le plus stable pour garantir une réponse purement audio
+  const prompt = `Read: ${cleanText}`;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -180,18 +187,24 @@ export const generateSpeech = async (text: string, _slowMode: boolean, retryCoun
       },
     });
 
-    const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    // RÉSOUDRE TS2345: Vérification explicite et extraction dans une variable typée
+    const candidates = response.candidates;
+    if (!candidates || candidates.length === 0) throw new Error("Aucun candidat");
     
-    // FIX TS2345: Vérification explicite de data avant de passer à decode()
+    const parts = candidates[0].content.parts;
+    const audioPart = parts.find(p => p.inlineData);
+    
     if (!audioPart || !audioPart.inlineData || !audioPart.inlineData.data) {
        throw new Error("L'IA n'a pas renvoyé de flux audio valide.");
     }
 
-    return decode(audioPart.inlineData.data);
+    // Ici TypeScript sait que audioPart.inlineData.data est une string non-nulle
+    const base64Data: string = audioPart.inlineData.data;
+    return decode(base64Data);
+    
   } catch (error: any) {
     console.error(`Erreur TTS (Tentative ${retryCount + 1}):`, error);
     
-    // On ne réessaie que sur les erreurs serveur ou temporaires
     if (retryCount < 1) {
       await new Promise(r => setTimeout(r, 2000));
       return generateSpeech(text, _slowMode, retryCount + 1);
